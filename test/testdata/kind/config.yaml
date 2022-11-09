@@ -14,3 +14,16 @@ nodes:
         containerPath: /etc/containerd/config.toml
       - hostPath: /tmp/artifact
         containerPath: /tmp/artifact
+      - hostPath: /dev/fuse
+        containerPath: /dev/fuse
+      # - hostPath: ./test/testdata/nydus/config.json
+      #   containerPath: /etc/nydus/config.json
+      # - hostPath: /var/lib/containerd-nydus
+      #   containerPath: /var/lib/containerd-nydus
+      #   propagation: Bidirectional
+      # - hostPath: /run/containerd-nydus
+      #   containerPath: /run/containerd-nydus
+      # - hostPath: /usr/local/bin/nydusd
+      #   containerPath: /usr/local/bin/nydusd
+      # - hostPath: /usr/local/bin/nydus-image
+      #   containerPath: /usr/local/bin/nydus-image

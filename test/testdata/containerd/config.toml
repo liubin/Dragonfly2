@@ -11,6 +11,10 @@ version = 2
   snapshotter = "overlayfs"
   # explicit default here, as we're configuring it below
   default_runtime_name = "runc"
+
+  # FIXME: nydus-snapshotter needs this
+  disable_snapshot_annotations = false
+
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
   # set default runtime handler to v2, which has a per-pod shim
   runtime_type = "io.containerd.runc.v2"
@@ -35,3 +39,19 @@ version = 2
 # https://github.com/containerd/containerd/blob/main/remotes/docker/resolver.go#L121
 [plugins."io.containerd.grpc.v1.cri".registry.mirrors."d7y.io"]
   endpoint = ["http://127.0.0.1:65001"]
+
+## For locally test only !!!
+# [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]
+#   endpoint = ["http://hub-mirror.c.163.com", "https://registry.docker-cn.com"]
+
+## FIXME: these are workaround, should be configured by snapshotter daemonset's initContainer.
+[proxy_plugins]
+  [proxy_plugins.nydus]
+    type = "snapshot"
+    address = "/run/containerd-nydus/containerd-nydus-grpc.sock"
+
+# this is a workaround to not change the system default snapshotter
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc-nydus]
+  runtime_type = "io.containerd.runc.v2"
+  snapshotter = "nydus"
+

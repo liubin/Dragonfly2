@@ -1,0 +1,191 @@
+name: E2E Test with Nydus
+
+on:
+  push:
+    branches: [e2e-nydus, main, release-*]
+    paths-ignore: ["**.md", "**.png", "**.jpg", "**.svg", "**/docs/**"]
+  pull_request:
+    branches: [main, release-*]
+    paths-ignore: ["**.md", "**.png", "**.jpg", "**.svg", "**/docs/**"]
+  schedule:
+    - cron: '0 4 * * *'
+
+env:
+  GO_VERSION: 1.19
+  KIND_VERSION: v0.12.0
+  CONTAINERD_VERSION: v1.5.2
+  NERDCTL_VER: 0.22.2
+  KIND_CONFIG_PATH: test/testdata/kind/config.yaml
+  DRAGONFLY_CHARTS_PATH: deploy/helm-charts/charts/dragonfly
+  # NYDUS_SNAPSHOTTER_CHARTS_PATH: deploy/helm-charts/charts/nydus-snapshotter
+  NYDUS_SNAPSHOTTER_CHARTS_PATH: helm-charts/charts/nydus-snapshotter
+
+jobs:
+  e2e_tests_nydus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: |
+          go mod download github.com/go-task/slim-sprig
+          go install github.com/onsi/ginkgo/v2/ginkgo@v2.1.0
+          mkdir -p /tmp/artifact
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v2
+        id: buildx
+        with:
+          install: true
+
+      - name: Setup Kind
+        uses: engineerd/setup-kind@v0.5.0
+        with:
+          version: ${{ env.KIND_VERSION }}
+          config: ${{ env.KIND_CONFIG_PATH }}
+
+      - name: Build images
+        run: |
+          hack/gen-buildx.sh
+          make docker-build docker-build-testing-tools
+          make kind-load
+
+      - name: Setup dragonfly
+        run: |
+          helm install --wait --timeout 10m --dependency-update \
+            --create-namespace --namespace dragonfly-system \
+            -f test/testdata/charts/config.yaml \
+            dragonfly ${{ env.DRAGONFLY_CHARTS_PATH }}
+
+      # - name: Setup nydus
+      #   run: |
+      #     helm install --wait --timeout 10m --dependency-update \
+      #     --create-namespace --namespace dragonfly-system \
+      #     -f test/testdata/charts/config.yaml \
+      #     dragonfly ${{ env.NYDUS_SNAPSHOTTER_CHARTS_PATH }}
+
+      # FIXME this is a workaround to use an un-official repo
+      - name: Setup nydus
+        continue-on-error: true
+        run: |
+          # clone and checkout the dev branch
+          git clone https://github.com/liubin/helm-charts
+          pushd helm-charts
+          git checkout add-nydus-snapshotter
+          popd
+
+          # install heml chart
+          helm install --wait --timeout 10m \
+            --create-namespace --namespace nydus-system \
+            -f test/testdata/charts/config-nydus.yaml \
+            nydus-snapshotter ${{ env.NYDUS_SNAPSHOTTER_CHARTS_PATH }}
+
+
+          export ns=nydus-system
+          p=`kubectl -n $ns get pods --no-headers -o custom-columns=NAME:metadata.name`
+          echo "snapshotter pod name ${p}"
+
+          kubectl -n $ns wait po $p --for=condition=ready --timeout=3m
+          kubectl -n $ns get pod $p -o yaml
+          kubectl -n $ns describe pod $p
+
+          # FIXME: containerd 1.7 needed to support snapshotter for runtime class
+          # as a workaround edit the config and set global snapshotter
+          # But cant run in container sed: cannot rename /etc/containerd/sedqrcaTS: Device or resource busy
+          # nor the -c option is avaliable.
+          # docker exec kind-control-plane sed -i 's/snapshotter = "overlayfs"/snapshotter = "nydus"/g' /etc/containerd/config.toml
+          docker exec kind-control-plane cp /etc/containerd/config.toml /etc/containerd/config.toml.tmp
+          docker exec kind-control-plane sed -i 's/snapshotter = "overlayfs"/snapshotter = "nydus"/g' /etc/containerd/config.toml.tmp
+          docker exec kind-control-plane cp -f /etc/containerd/config.toml.tmp /etc/containerd/config.toml
+
+          # nor edit file in the host
+          # sed -i 's/snapshotter = "overlayfs"/snapshotter = "nydus"/g' ./test/testdata/containerd/config.toml
+
+          docker exec kind-control-plane systemctl restart containerd
+          docker exec kind-control-plane systemctl status containerd
+
+      - name: Dump configs
+        continue-on-error: true
+        run: |
+          echo "nydus pod status ========="
+
+          export ns=nydus-system
+          p=`kubectl -n $ns get pods --no-headers -o custom-columns=NAME:metadata.name`
+          echo "pod name ${p}"
+          # ls -l /dev/
+
+          # kubectl -n $ns wait po $p --for=condition=ready --timeout=3m || true
+          # kubectl -n $ns describe pod $p
+          # kubectl -n nydus-system get pods -o yaml
+
+          # kubectl -n $ns logs $p -c nydus-snapshotter || true
+          # kubectl -n $ns logs $p -c update-containerd || true
+
+          echo "cat containerd config ========="
+          docker exec kind-control-plane cat /etc/containerd/config.toml
+
+          echo "dump containerd config ========="
+          docker exec kind-control-plane containerd config dump
+
+
+          # echo "net status ========="
+          # netstat -an
+          # kubectl -n nydus-system get cm nydus-snapshotter -o yaml
+
+      - name: Run E2E test
+        run: |
+          # set -x
+          # wget https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VER}/nerdctl-${NERDCTL_VER}-linux-amd64.tar.gz && \
+          #   tar xzf nerdctl-${NERDCTL_VER}-linux-amd64.tar.gz && \
+          #   sudo install -D -m 755 nerdctl /usr/local/bin/nerdctl
+
+          # docker exec kind-control-plane ctr -- image pull --snapshotter nydus ghcr.io/dragonflyoss/image-service/nginx:nydus-latest
+          # docker exec kind-control-plane ctr -- run --snapshotter nydus ghcr.io/dragonflyoss/image-service/nginx:nydus-latest date
+
+          docker exec kind-control-plane curl -L -o nerdctl-${NERDCTL_VER}-linux-amd64.tar.gz https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VER}/nerdctl-${NERDCTL_VER}-linux-amd64.tar.gz
+          docker exec kind-control-plane tar xzf nerdctl-${NERDCTL_VER}-linux-amd64.tar.gz
+          docker exec kind-control-plane install -D -m 755 nerdctl /usr/local/bin/nerdctl
+
+          # this is only a simple test that run `date` in container
+          docker exec kind-control-plane /usr/local/bin/nerdctl run --snapshotter nydus --network=none ghcr.io/dragonflyoss/image-service/nginx:nydus-latest date
+
+          # kubectl apply -f test/testdata/k8s/runtimeClass.yaml
+          # kubectl apply -f test/testdata/k8s/nydus-pod.yaml
+
+          # kubectl wait po nydus-pod --for=condition=ready --timeout=3m || true
+          # # kubectl get pod nydus-pod -o yaml
+          # kubectl describe pod nydus-pod
+          # kubectl delete -f test/testdata/k8s/nydus-pod.yaml
+
+
+      - name: Dump logs
+        if: ${{ failure() }}
+        run: |
+          echo "debug kind containerd plugins: ============"
+          # docker exec kind-control-plane ctr plugins ls
+          # docker exec kind-control-plane ctr plugins ls -d id==nydus
+          echo "debug kind containerd config ============"
+          docker exec kind-control-plane journalctl -u containerd
+
+          export ns=nydus-system
+          echo "debug nydus pods: ============"
+          for p in `kubectl -n $ns get pods --no-headers -o custom-columns=NAME:metadata.name`; do kubectl -n $ns get pod $p -o yaml; done
+          for p in `kubectl -n $ns get pods --no-headers -o custom-columns=NAME:metadata.name`; do kubectl -n $ns describe pod $p; done
+
+
+          echo "debug nydus logs start: ============"
+          for p in `kubectl -n $ns get pods --no-headers -o custom-columns=NAME:metadata.name`; do kubectl -n $ns logs $p -c nydus-snapshotter || echo "failed to get snapshotter log"; done
+          echo "debug nydus logs end: ============"
+
+
+          echo "debug cni bin: ============"
+          ls -l /opt/cni/bin
