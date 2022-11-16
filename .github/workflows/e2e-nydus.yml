@@ -89,8 +89,9 @@ jobs:
             -f test/testdata/charts/config-nydus.yaml \
             nydus-snapshotter ${{ env.NYDUS_SNAPSHOTTER_CHARTS_PATH }}
 
-
           export ns=nydus-system
+          kubectl -n $ns get daemonset -o yaml
+
           p=`kubectl -n $ns get pods --no-headers -o custom-columns=NAME:metadata.name`
           echo "snapshotter pod name ${p}"
 
@@ -105,6 +106,7 @@ jobs:
           # docker exec kind-control-plane sed -i 's/snapshotter = "overlayfs"/snapshotter = "nydus"/g' /etc/containerd/config.toml
           docker exec kind-control-plane cp /etc/containerd/config.toml /etc/containerd/config.toml.tmp
           docker exec kind-control-plane sed -i 's/snapshotter = "overlayfs"/snapshotter = "nydus"/g' /etc/containerd/config.toml.tmp
+          docker exec kind-control-plane sed -i 's/pause:3.5/pause:3.6/g' /etc/containerd/config.toml.tmp
           docker exec kind-control-plane cp -f /etc/containerd/config.toml.tmp /etc/containerd/config.toml
 
           # nor edit file in the host
@@ -158,13 +160,16 @@ jobs:
           # this is only a simple test that run `date` in container
           docker exec kind-control-plane /usr/local/bin/nerdctl run --snapshotter nydus --network=none ghcr.io/dragonflyoss/image-service/nginx:nydus-latest date
 
-          # kubectl apply -f test/testdata/k8s/runtimeClass.yaml
-          # kubectl apply -f test/testdata/k8s/nydus-pod.yaml
+          # docker exec kind-control-plane ctr --namespace k8s.io image delete k8s.gcr.io/pause:3.5
+          # docker exec kind-control-plane ctr --namespace k8s.io image pull --snapshotter nydus k8s.gcr.io/pause:3.5
 
-          # kubectl wait po nydus-pod --for=condition=ready --timeout=3m || true
-          # # kubectl get pod nydus-pod -o yaml
-          # kubectl describe pod nydus-pod
-          # kubectl delete -f test/testdata/k8s/nydus-pod.yaml
+          # kubectl apply -f test/testdata/k8s/runtimeClass.yaml
+          kubectl apply -f test/testdata/k8s/nydus-pod.yaml
+
+          kubectl wait po nydus-pod --for=condition=ready --timeout=1m
+          # kubectl get pod nydus-pod -o yaml
+          kubectl describe pod nydus-pod
+          kubectl delete -f test/testdata/k8s/nydus-pod.yaml
 
 
       - name: Dump logs
@@ -186,6 +191,8 @@ jobs:
           for p in `kubectl -n $ns get pods --no-headers -o custom-columns=NAME:metadata.name`; do kubectl -n $ns logs $p -c nydus-snapshotter || echo "failed to get snapshotter log"; done
           echo "debug nydus logs end: ============"
 
+          # echo "debug cni bin: ============"
+          # docker exec kind-control-plane ls -l /opt/cni/bin
 
-          echo "debug cni bin: ============"
-          ls -l /opt/cni/bin
+          echo "debug kind kubelet config ============"
+          docker exec kind-control-plane journalctl -u kubelet
