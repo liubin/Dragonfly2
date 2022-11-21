@@ -106,7 +106,7 @@ jobs:
           # docker exec kind-control-plane sed -i 's/snapshotter = "overlayfs"/snapshotter = "nydus"/g' /etc/containerd/config.toml
           docker exec kind-control-plane cp /etc/containerd/config.toml /etc/containerd/config.toml.tmp
           docker exec kind-control-plane sed -i 's/snapshotter = "overlayfs"/snapshotter = "nydus"/g' /etc/containerd/config.toml.tmp
-          docker exec kind-control-plane sed -i 's/pause:3.5/pause:3.6/g' /etc/containerd/config.toml.tmp
+          # docker exec kind-control-plane sed -i 's/pause:3.5/pause:3.6/g' /etc/containerd/config.toml.tmp
           docker exec kind-control-plane cp -f /etc/containerd/config.toml.tmp /etc/containerd/config.toml
 
           # nor edit file in the host
