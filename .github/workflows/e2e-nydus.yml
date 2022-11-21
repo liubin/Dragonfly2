@@ -160,8 +160,9 @@ jobs:
           # this is only a simple test that run `date` in container
           docker exec kind-control-plane /usr/local/bin/nerdctl run --snapshotter nydus --network=none ghcr.io/dragonflyoss/image-service/nginx:nydus-latest date
 
-          # docker exec kind-control-plane ctr --namespace k8s.io image delete k8s.gcr.io/pause:3.5
-          # docker exec kind-control-plane ctr --namespace k8s.io image pull --snapshotter nydus k8s.gcr.io/pause:3.5
+          docker exec kind-control-plane ctr --version
+          docker exec kind-control-plane ctr --namespace k8s.io image remove k8s.gcr.io/pause:3.5
+          docker exec kind-control-plane ctr --namespace k8s.io image pull --snapshotter nydus k8s.gcr.io/pause:3.5
 
           # kubectl apply -f test/testdata/k8s/runtimeClass.yaml
           kubectl apply -f test/testdata/k8s/nydus-pod.yaml
