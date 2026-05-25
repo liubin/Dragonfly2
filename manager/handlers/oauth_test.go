@@ -59,6 +59,15 @@ var (
 		ClientID:     "2",
 		ClientSecret: "secret",
 	}
+	// mockOauthResponseModel is the shape clients observe over the wire.
+	// The model's ClientSecret field is marked json:"-" so the secret never
+	// crosses the API boundary, even on create/update/get responses.
+	mockOauthResponseModel = &models.Oauth{
+		BaseModel: mockBaseModel,
+		Name:      "google",
+		BIO:       "bio",
+		ClientID:  "2",
+	}
 )
 
 func mockOauthRouter(h *Handlers) *gin.Engine {
@@ -101,7 +110,7 @@ func TestHandlers_CreateOauth(t *testing.T) {
 				oauth := models.Oauth{}
 				err := json.Unmarshal(w.Body.Bytes(), &oauth)
 				assert.NoError(err)
-				assert.Equal(mockOauthModel, &oauth)
+				assert.Equal(mockOauthResponseModel, &oauth)
 			},
 		},
 	}
@@ -202,7 +211,7 @@ func TestHandlers_UpdateOauth(t *testing.T) {
 				oauth := models.Oauth{}
 				err := json.Unmarshal(w.Body.Bytes(), &oauth)
 				assert.NoError(err)
-				assert.Equal(mockOauthModel, &oauth)
+				assert.Equal(mockOauthResponseModel, &oauth)
 			},
 		},
 	}
@@ -250,7 +259,7 @@ func TestHandlers_GetOauth(t *testing.T) {
 				oauth := models.Oauth{}
 				err := json.Unmarshal(w.Body.Bytes(), &oauth)
 				assert.NoError(err)
-				assert.Equal(mockOauthModel, &oauth)
+				assert.Equal(mockOauthResponseModel, &oauth)
 			},
 		},
 	}
@@ -302,7 +311,7 @@ func TestHandlers_GetOauths(t *testing.T) {
 				oauth := models.Oauth{}
 				err := json.Unmarshal(w.Body.Bytes()[1:w.Body.Len()-1], &oauth)
 				assert.NoError(err)
-				assert.Equal(mockOauthModel, &oauth)
+				assert.Equal(mockOauthResponseModel, &oauth)
 			},
 		},
 	}

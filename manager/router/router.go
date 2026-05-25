@@ -132,10 +132,10 @@ func Init(cfg *config.Config, logDir string, service service.Service, database *
 	pm.GET("", h.GetPermissions(r))
 
 	// Oauth.
-	oa := apiv1.Group("/oauth")
-	oa.POST("", jwt.MiddlewareFunc(), rbac, h.CreateOauth)
-	oa.DELETE(":id", jwt.MiddlewareFunc(), rbac, h.DestroyOauth)
-	oa.PATCH(":id", jwt.MiddlewareFunc(), rbac, h.UpdateOauth)
+	oa := apiv1.Group("/oauth", jwt.MiddlewareFunc(), rbac)
+	oa.POST("", h.CreateOauth)
+	oa.DELETE(":id", h.DestroyOauth)
+	oa.PATCH(":id", h.UpdateOauth)
 	oa.GET(":id", h.GetOauth)
 	oa.GET("", h.GetOauths)
 
