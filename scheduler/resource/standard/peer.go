@@ -457,6 +457,11 @@ func (p *Peer) DownloadTinyFile() ([]byte, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
+			// Restrict the destination to global-unicast addresses so that an
+			// attacker-controlled PeerHost.Ip/DownPort cannot force the scheduler
+			// to connect to loopback or link-local (e.g. cloud metadata) targets.
+			// This mirrors the manager preheat path (internal/job/image.go).
+			DialContext:     nethttp.NewSafeDialer().DialContext,
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
