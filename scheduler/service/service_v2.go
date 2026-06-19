@@ -146,6 +146,14 @@ func (v *V2) AnnouncePeer(stream schedulerv2.Scheduler_AnnouncePeerServer) error
 			registerPeerRequest := announcePeerRequest.RegisterPeerRequest
 			log.Infof("receive RegisterPeerRequest, url: %s, range: %#v, header: %#v, need back-to-source: %t",
 				registerPeerRequest.Download.GetUrl(), registerPeerRequest.Download.GetRange(), registerPeerRequest.Download.GetRequestHeader(), registerPeerRequest.Download.GetNeedBackToSource())
+
+			// Reclaim the resource of peer when the stream is closed.
+			defer func(peerID string) {
+				if peer, loaded := v.resource.PeerManager().Load(peerID); loaded {
+					peer.DeleteAnnouncePeerStream()
+				}
+			}(req.GetPeerId())
+
 			if err := v.handleRegisterPeerRequest(ctx, stream, req.GetHostId(), req.GetTaskId(), req.GetPeerId(), registerPeerRequest); err != nil {
 				log.Error(err)
 
